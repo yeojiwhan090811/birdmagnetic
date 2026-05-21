@@ -276,6 +276,30 @@ body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;
       </div>
     </div>
 
+    <!-- S↔T 시뮬레이터 -->
+    <div class="psec">
+      <div class="stitle">S↔T 전환 시뮬레이터</div>
+      <div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:5px;">
+          <span>자기장 세기 B</span>
+          <span id="stBLabel" style="color:var(--amber)">35 μT</span>
+        </div>
+        <input type="range" id="stSlider" min="0" max="100" value="35"
+          style="width:100%;accent-color:var(--purple);"
+          oninput="updateSTSim(this.value)">
+      </div>
+      <canvas id="stSimCanvas" width="260" height="140" style="width:100%;border-radius:3px;border:1px solid var(--border);display:block;"></canvas>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:7px;">
+        <div class="drow" style="font-size:8px;"><span class="dk">S 비율</span><span class="dv c" id="stS">--</span></div>
+        <div class="drow" style="font-size:8px;"><span class="dk">T 비율</span><span class="dv r" id="stT">--</span></div>
+        <div class="drow" style="font-size:8px;"><span class="dk">신경신호</span><span class="dv g" id="stSig">--</span></div>
+        <div class="drow" style="font-size:8px;"><span class="dk">FADH•</span><span class="dv a" id="stFadh">--</span></div>
+      </div>
+      <div style="font-family:'Space Mono',monospace;font-size:8px;color:var(--muted);margin-top:8px;line-height:1.5;padding:6px;background:rgba(0,212,255,0.04);border-radius:3px;border-left:2px solid var(--cyan);">
+        자기장 → Zeeman 효과 → T±₁ 에너지 분리 → S/T 비율 변화 → 신경 신호
+      </div>
+    </div>
+
     <!-- 원리 -->
     <div class="psec">
       <div class="stitle">미분 기반 항법 원리</div>
@@ -1066,6 +1090,7 @@ function init(){
 
   buildFPDB();
   renderMap();
+  updateSTSim(35);
   renderFPMarkers();
   setBirdPos(0.35,0.28);
 }
@@ -1078,6 +1103,72 @@ window.addEventListener('resize',()=>{
   renderFPMarkers();
   setBirdPos(birdNX,birdNY);
 });
+
+// ═══════════════════════════════════════════════════════
+// S↔T 시뮬레이터
+// ═══════════════════════════════════════════════════════
+function updateSTSim(b) {
+  b = parseFloat(b);
+  document.getElementById('stBLabel').textContent =
+    b.toFixed(0) + ' μT' + (b < 30 ? ' (약)' : b < 65 ? ' (지구)' : ' (강)');
+
+  const cv = document.getElementById('stSimCanvas');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  ctx.fillStyle = '#030810'; ctx.fillRect(0,0,W,H);
+
+  const sRatio = Math.min(0.97, Math.max(0.03,
+    0.52 + (b/100)*0.08 - Math.sin(b*0.1)*0.04));
+  const tRatio = 1 - sRatio;
+  const signal = Math.abs(sRatio - 0.5) * 200;
+  const fadh = tRatio * 85;
+
+  document.getElementById('stS').textContent = (sRatio*100).toFixed(1)+'%';
+  document.getElementById('stT').textContent = (tRatio*100).toFixed(1)+'%';
+  document.getElementById('stSig').textContent = signal.toFixed(1)+' a.u.';
+  document.getElementById('stFadh').textContent = fadh.toFixed(1)+' a.u.';
+
+  const bars = [
+    { label:'S', v:sRatio, color:'#00d4ff' },
+    { label:'T', v:tRatio, color:'#ff3355' },
+    { label:'신호', v:signal/20, color:'#00ff88' },
+    { label:'FADH•', v:fadh/85, color:'#ffaa00' },
+  ];
+  const bw = 46, gap = 14, startX = 18, bH = 90, startY = H - 26;
+
+  bars.forEach((bar, i) => {
+    const x = startX + i*(bw+gap);
+    const fh = Math.min(bH, bar.v * bH);
+    // 배경
+    ctx.fillStyle = bar.color + '18';
+    ctx.fillRect(x, startY - bH, bw, bH);
+    // 채우기
+    ctx.fillStyle = bar.color + 'cc';
+    ctx.fillRect(x, startY - fh, bw, fh);
+    // 수치
+    ctx.fillStyle = fh > 20 ? 'rgba(0,0,0,0.8)' : bar.color;
+    ctx.font = 'bold 9px IBM Plex Mono, Space Mono, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText((bar.v*100).toFixed(0)+'%', x+bw/2, fh > 20 ? startY - fh/2 : startY - fh - 8);
+    // 라벨
+    ctx.fillStyle = bar.color;
+    ctx.font = '8px Space Mono, monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillText(bar.label, x+bw/2, startY + 4);
+  });
+
+  // 지구 자기장 범위 표시
+  ctx.fillStyle = 'rgba(0,212,255,0.12)';
+  ctx.fillRect(W*(25/100), H-5, W*(40/100), 5);
+  ctx.fillStyle = 'rgba(0,212,255,0.5)';
+  const bx = W*(b/100);
+  ctx.beginPath(); ctx.arc(bx, H-2, 3, 0, Math.PI*2); ctx.fill();
+  // 헤더
+  ctx.fillStyle = 'rgba(100,150,200,0.7)';
+  ctx.font = '8px Space Mono, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  ctx.fillText('B = '+b.toFixed(0)+' μT  |  25~65μT = 지구', W/2, 4);
+}
 
 // 날갯짓
 let wt=0;
